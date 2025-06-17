@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/quickchatai-quickchat-ai-mcp-badge.png)](https://mseep.ai/app/quickchatai-quickchat-ai-mcp)
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/incentivai/quickchat-ai-mcp/main/img/background.jpg"/>
 </p>
