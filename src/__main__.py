@@ -5,6 +5,7 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from mcp.server import FastMCP
+from fastmcp import FastMCP as FastMCP2
 
 from src.server import (
     app_lifespan,
@@ -41,4 +42,6 @@ mcp.add_tool(
 
 def run():
     print("Starting Quickchat mcp server")
-    mcp.run()
+    # mcp.run()
+    mcp_proxy = FastMCP2.as_proxy(mcp, host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
+    mcp_proxy.run(transport="streamable-http")
