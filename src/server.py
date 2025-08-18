@@ -5,21 +5,24 @@ import json
 import os
 
 from dotenv import load_dotenv
-from mcp.server.fastmcp import Context, FastMCP
+from fastmcp import Context, FastMCP
 import requests
 
 load_dotenv()
 
-
 BASE_URL: str = os.getenv("BASE_URL", "https://app.quickchat.ai")
 SCENARIO_ID_TO_CONV_ID: dict[str, str] = {}
 
+SCENARIO_ID: str = os.getenv("SCENARIO_ID")
+if SCENARIO_ID is None:
+    raise ValueError("Please provide SCENARIO_ID.")
+API_KEY: str = os.getenv("API_KEY")
 
 CHAT_ENDPOINT = f"{BASE_URL}/v1/api/mcp/chat"
 SETTINGS_ENDPOINT = f"{BASE_URL}/v1/api/mcp/settings"
 
 
-def fetch_mcp_settings(scenario_id: str, api_key: str | None = None):
+def fetch_mcp_settings(scenario_id: str, api_key: str | None = None) -> tuple[str | None, str | None, str | None]:
     response = requests.get(
         url=SETTINGS_ENDPOINT,
         headers={"scenario-id": scenario_id, "X-API-Key": api_key},
@@ -103,3 +106,14 @@ async def send_message(
             ] = data["conv_id"]
 
         return data["reply"]
+
+
+async def send_message_with_default_values(
+    message: str, context: Context
+) -> str:
+    return await send_message(
+        message=message,
+        context=context,
+        scenario_id=SCENARIO_ID,
+        api_key=API_KEY
+    )
