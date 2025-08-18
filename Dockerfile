@@ -4,18 +4,25 @@ FROM python:3.13-slim
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Install the project into /app
-COPY . /app
+# Workdir
 WORKDIR /app
 
+# Install deps (use layering for cache)
+COPY pyproject.toml uv.lock* ./
+# add anything referenced by pyproject metadata:
+COPY README.md ./
+
+RUN uv sync --frozen
+
+# Copy the rest of the project
+COPY . .
+
 # Allow statements and log messages to immediately appear in the logs
-ENV PYTHONUNBUFFERED=1
+ENV PYTHONUNBUFFERED=1 \
+    HOST=0.0.0.0 \
+    PORT=8080
 
-# Install dependencies
-RUN uv sync
-
-EXPOSE $PORT
+EXPOSE 8080
 
 # Run the FastMCP server
-# CMD ["uv", "run", "server.py"]
 CMD ["uv", "run", "quickchat-ai-mcp"]

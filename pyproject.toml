@@ -13,7 +13,7 @@ dependencies = [
     "requests>=2.31.0",
     "mcp>=1.0.0",
     "python-dotenv>=1.1.0",
-    "fastmcp==2.6.1",
+    "fastmcp==2.11.3",
 ]
 keywords = [
     "quickchat",

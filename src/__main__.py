@@ -15,7 +15,7 @@ SCENARIO_ID: str = os.getenv("SCENARIO_ID")
 if SCENARIO_ID is None:
     raise ValueError("Please provide SCENARIO_ID.")
 API_KEY: str = os.getenv("API_KEY")
-PORT: int = os.getenv("PORT", 8080)
+PORT: int = int(os.getenv("PORT", "8080"))
 
 mcp_name, mcp_command, send_message_tool_description = fetch_mcp_settings(
     SCENARIO_ID, API_KEY
@@ -29,8 +29,8 @@ else:
     send_message_with_default_values.__name__ = "send_message"
 
 # Register tools by hand
-mcp.add_tool(
-    fn=send_message_with_default_values,
+mcp.tool(
+    send_message_with_default_values,
     name=send_message_with_default_values.__name__,
     description=send_message_tool_description,
 )
