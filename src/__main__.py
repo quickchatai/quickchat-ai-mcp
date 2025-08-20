@@ -1,39 +1,39 @@
 import os
 import sys
 
+from src.auth_and_setup import MCPTokenVerifier
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from fastmcp import FastMCP
 
 from src.server import (
     app_lifespan,
-    fetch_mcp_settings,
-    send_message_with_default_values,
+    fetch_jwt_public_key,
+    send_message_with_context_values,
 )
 
-SCENARIO_ID: str = os.getenv("SCENARIO_ID")
-if SCENARIO_ID is None:
-    raise ValueError("Please provide SCENARIO_ID.")
-API_KEY: str = os.getenv("API_KEY")
 PORT: int = int(os.getenv("PORT", "8080"))
 
-mcp_name, mcp_command, send_message_tool_description = fetch_mcp_settings(
-    SCENARIO_ID, API_KEY
-)
+jwt_public_key = fetch_jwt_public_key()
+# mcp_name, mcp_command, send_message_tool_description = fetch_mcp_settings(
+#     SCENARIO_ID, API_KEY
+# )
 
-mcp = FastMCP(mcp_name, lifespan=app_lifespan)
+mcp = FastMCP(lifespan=app_lifespan, auth=MCPTokenVerifier(public_key=jwt_public_key))
 
-if mcp_command:
-    send_message_with_default_values.__name__ = mcp_command
-else:
-    send_message_with_default_values.__name__ = "send_message"
+# if mcp_command:
+#     send_message_with_context_values.__name__ = mcp_command
+# else:
+send_message_with_context_values.__name__ = "send_message"
 
 # Register tools by hand
 mcp.tool(
-    send_message_with_default_values,
-    name=send_message_with_default_values.__name__,
-    description=send_message_tool_description,
+    send_message_with_context_values,
+    name=send_message_with_context_values.__name__,
+    # description=send_message_tool_description,
+    
 )
+# mcp.add_middleware(LoadSessionState())
 
 
 def run():
@@ -41,5 +41,5 @@ def run():
     mcp.run(
         transport="streamable-http",
         host="0.0.0.0",
-        port=PORT
+        port=PORT,
     )
