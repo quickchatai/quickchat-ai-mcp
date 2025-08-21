@@ -34,7 +34,7 @@ async def load_jwt_token(fastmcp_context: Context):
     except ClientError as e:
         print(f"Error while validating token, scenario_id: {scenario_id}, jwt_token: {auth_bearer_header}")
         raise e
-
+    print("Validation request successful, saving new token")
     lifespan_context.jwt_token_by_session_id[session_id] = validated_token
     return
 

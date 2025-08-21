@@ -32,8 +32,9 @@ async def validate_mcp_token(scenario_id: str, jwt_token: str) -> str:
         )
 
     if response.status_code != 200:
+        print(f"Configuration error. Please check your MCP token and scenario ID, scenario_id: {scenario_id}, status_code: {response.status_code}")
         raise ClientError(
-            f"Configuration error. Please check your MCP token and scenario ID, scenario_id: {scenario_id}, status_code: {response.status_code}"
+            "Configuration error. Please check your MCP token and scenario ID"
         )
 
     return response.json()["token"]
