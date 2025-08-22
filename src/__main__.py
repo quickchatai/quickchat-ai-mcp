@@ -1,36 +1,26 @@
 import os
 import sys
 
-from fastmcp import FastMCP
-
-from src.lifespan_context import app_lifespan_context
-from src.middleware import (
-    ListToolsMiddleware,
-    SetupMiddleware,
-)
-from src.server import (
-    fetch_jwt_public_key,
-)
+from src.mcp_proxy.mcp_proxy import mcp_proxy
+from src.mcp_server.mcp_server import mcp
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-IS_MCP_PUBLIC: bool = bool(os.getenv("IS_MCP_PUBLIC", "False") == "True")
-PORT: int = int(os.getenv("PORT", "8080"))
-
-if IS_MCP_PUBLIC:
-    mcp = FastMCP(lifespan=app_lifespan_context)
-else:
-    jwt_public_key = fetch_jwt_public_key()
-    mcp = FastMCP(lifespan=app_lifespan_context, auth=MCPTokenVerifier(public_key=jwt_public_key))
-
-mcp.add_middleware(SetupMiddleware())
-mcp.add_middleware(ListToolsMiddleware())
+SERVER_TYPE = "SERVER"  # / "PROXY"
 
 def run():
     print("Starting Quickchat mcp server")
-    mcp.run(
-        transport="streamable-http",
-        host="0.0.0.0",
-        port=PORT,
-        path="/mcp/{mcp_id}"
-    )
+    if SERVER_TYPE == "SERVER":
+        mcp.run(
+            transport="streamable-http",
+            host="0.0.0.0",
+            port=8080,
+            path="/mcp/{mcp_id}"
+        )
+    else:
+        mcp_proxy.run(
+            transport="streamable-http",
+            host="0.0.0.0",
+            port=8088,
+            path="/mcp_proxy/{mcp_id}"
+        )
