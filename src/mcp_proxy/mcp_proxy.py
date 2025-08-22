@@ -14,7 +14,7 @@ from src.requests import fetch_mcp_settings_for_scenario_id
 from src.schemas import MCPSettingsSchema
 from src.utils import (
     get_scenario_id,
-    get_session_id_and_lifespan_context_from_fastmcp_context,
+    get_session_id_and_lifespan_context_from_fastmcp_context, get_scenario_id_from_jwt_token,
 )
 
 
@@ -40,6 +40,14 @@ async def client_factory() -> Client:
 
         print("Loading MCP Settings")
         scenario_id = get_scenario_id()
+        token_scenario_id = get_scenario_id_from_jwt_token(mcp_jwt_token)
+
+        if scenario_id != token_scenario_id:
+            print(f"Scenario id mismatch, aborting, request_scenario_id: {scenario_id}, token_scenario_id: {token_scenario_id}")
+            raise ClientError(
+                "Configuration error. Please check your MCP token and scenario ID"
+            )
+
         try:
             mcp_settings: MCPSettingsSchema = await fetch_mcp_settings_for_scenario_id(
                 scenario_id=scenario_id,
