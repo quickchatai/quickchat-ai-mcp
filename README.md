@@ -4,6 +4,7 @@
 
 # Quickchat AI MCP server
 
+[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/incentivai/quickchat-ai-mcp)](https://archestra.ai/mcp-catalog/incentivai__quickchat-ai-mcp)
 The [Quickchat AI](https://quickchat.ai) MCP ([Model Context Protocol](https://modelcontextprotocol.io/)) server allows you to let anyone plug in your Quickchat AI Agent into their favourite AI app such as Claude Desktop, Cursor, VS Code, Windsurf and [more](https://modelcontextprotocol.io/clients#feature-support-matrix).
 
 ## Quickstart
