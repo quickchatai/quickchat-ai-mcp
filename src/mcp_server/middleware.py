@@ -27,26 +27,18 @@ class ListToolsMiddleware(Middleware):
         context: MiddlewareContext,
         call_next
     ) -> list[Tool]:
-        print("BBB")
         tools = await call_next(context)
         tools = tools or []
+
         lifespan_context: AppContext
-        print("A")
         _, lifespan_context = get_session_id_and_lifespan_context_from_fastmcp_context(
             fastmcp_context=context.fastmcp_context)
-        print("A")
 
         scenario_id = get_scenario_id()
-        print("A")
-        print(tools)
         tools = [tool for tool in tools if scenario_id in tool.tags]
-        print("A")
 
         mcp_settings: MCPSettings = get_mcp_settings_from_fastmcp_context(fastmcp_context=context.fastmcp_context)
-        print("A")
         mcp_jwt_token: str = get_mcp_jwt_token_from_fastmcp_context(fastmcp_context=context.fastmcp_context)
-        print("A")
-        print(len(tools))
         if len(tools) == 0:
             print(f"No send_message_tool found for scenario_id: {scenario_id}, creating")
             lifespan_context.scenario_ids_with_tool.add(scenario_id)
@@ -58,17 +50,12 @@ class ListToolsMiddleware(Middleware):
             )
             print("Send_message_tool successfully created")
             tools = [send_message_tool]
-            print("AAAAAAA")
-            print(send_message_tool)
         elif len(tools) == 1:
-            print("ZZZZ")
             send_message_tool = await update_send_message_tool_for_scenario_id(
                 scenario_id=scenario_id,
                 mcp_settings=mcp_settings,
                 fastmcp=context.fastmcp_context.fastmcp
             )
-            print("XXXXX")
-            print(send_message_tool)
             tools = [send_message_tool]
         else:
             print(f"Multiple send_message_tools found for scenario_id: {scenario_id}, creating")
@@ -83,11 +70,9 @@ class SetupMiddleware(Middleware):
         context: MiddlewareContext,
         call_next: CallNext,
     ) -> Any:
-        print("KKKKK")
         session_id, lifespan_context = get_session_id_and_lifespan_context_from_fastmcp_context(
             fastmcp_context=context.fastmcp_context
         )
-        print("VVVV")
 
         if any([
             session_id not in lifespan_context.mcp_jwt_token_by_session_id,
