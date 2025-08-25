@@ -1,20 +1,23 @@
 from typing import Any
 
 from fastmcp.exceptions import ClientError
-from fastmcp.server.middleware import Middleware, MiddlewareContext, CallNext
+from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
 from fastmcp.tools import Tool
 
-from src.mcp_server.lifespan_schemas import AppContext
+from src.mcp_server.lifespan_context import (
+    get_mcp_settings_from_fastmcp_context,
+    set_mcp_jwt_token,
+    set_mcp_settings, get_mcp_jwt_token_from_fastmcp_context,
+)
+from src.mcp_server.lifespan_schemas import AppContext, MCPSettings
 from src.mcp_server.tools import (
     create_send_message_tool_for_scenario_id,
     update_send_message_tool_for_scenario_id,
 )
-from src.schemas import MCPSettingsSchema
 from src.utils import (
     get_bearer_token,
-    get_mcp_settings,
     get_scenario_id,
-    get_session_id_and_lifespan_context_from_fastmcp_context, get_scenario_id_from_jwt_token,
+    get_session_id_and_lifespan_context_from_fastmcp_context,
 )
 
 
@@ -24,17 +27,26 @@ class ListToolsMiddleware(Middleware):
         context: MiddlewareContext,
         call_next
     ) -> list[Tool]:
+        print("BBB")
         tools = await call_next(context)
+        tools = tools or []
         lifespan_context: AppContext
+        print("A")
         _, lifespan_context = get_session_id_and_lifespan_context_from_fastmcp_context(
             fastmcp_context=context.fastmcp_context)
+        print("A")
 
         scenario_id = get_scenario_id()
+        print("A")
+        print(tools)
         tools = [tool for tool in tools if scenario_id in tool.tags]
+        print("A")
 
-        mcp_settings: MCPSettingsSchema = get_mcp_settings()
-        mcp_jwt_token = get_bearer_token()
-
+        mcp_settings: MCPSettings = get_mcp_settings_from_fastmcp_context(fastmcp_context=context.fastmcp_context)
+        print("A")
+        mcp_jwt_token: str = get_mcp_jwt_token_from_fastmcp_context(fastmcp_context=context.fastmcp_context)
+        print("A")
+        print(len(tools))
         if len(tools) == 0:
             print(f"No send_message_tool found for scenario_id: {scenario_id}, creating")
             lifespan_context.scenario_ids_with_tool.add(scenario_id)
@@ -46,12 +58,17 @@ class ListToolsMiddleware(Middleware):
             )
             print("Send_message_tool successfully created")
             tools = [send_message_tool]
+            print("AAAAAAA")
+            print(send_message_tool)
         elif len(tools) == 1:
+            print("ZZZZ")
             send_message_tool = await update_send_message_tool_for_scenario_id(
                 scenario_id=scenario_id,
                 mcp_settings=mcp_settings,
                 fastmcp=context.fastmcp_context.fastmcp
             )
+            print("XXXXX")
+            print(send_message_tool)
             tools = [send_message_tool]
         else:
             print(f"Multiple send_message_tools found for scenario_id: {scenario_id}, creating")
@@ -60,17 +77,30 @@ class ListToolsMiddleware(Middleware):
         return tools
 
 
-class ValidateScenarioIdMiddleware(Middleware):
+class SetupMiddleware(Middleware):
     async def on_request(
         self,
         context: MiddlewareContext,
         call_next: CallNext,
     ) -> Any:
-        request_scenario_id = get_scenario_id()
-        mcp_jwt_token = get_bearer_token()
-        token_scenario_id = get_scenario_id_from_jwt_token(mcp_jwt_token)
+        print("KKKKK")
+        session_id, lifespan_context = get_session_id_and_lifespan_context_from_fastmcp_context(
+            fastmcp_context=context.fastmcp_context
+        )
+        print("VVVV")
 
-        if request_scenario_id != token_scenario_id:
-            raise ClientError(
+        if any([
+            session_id not in lifespan_context.mcp_jwt_token_by_session_id,
+            session_id not in lifespan_context.mcp_settings_by_session_id,
+        ]):
+            lifespan_context.mcp_jwt_token_by_session_id[session_id] = None
+            lifespan_context.mcp_settings_by_session_id[session_id] = None
 
+            mcp_jwt_token = await set_mcp_jwt_token()
+            lifespan_context.mcp_jwt_token_by_session_id[session_id] = mcp_jwt_token
+
+            mcp_settings: MCPSettings = await set_mcp_settings(
+                mcp_jwt_token=mcp_jwt_token
             )
+            lifespan_context.mcp_settings_by_session_id[session_id] = mcp_settings
+        await call_next(context)

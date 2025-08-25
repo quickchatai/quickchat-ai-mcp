@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.requests import send_message
-from src.mcp_server.lifespan_context import app_lifespan_context, get_mcp_settings
+from src.mcp_server.lifespan_context import app_lifespan_context, set_mcp_settings
 
 TEST_SCENARIO_ID = "test_scenario_id"
 TEST_API_KEY = "test_api_key"
@@ -68,7 +68,7 @@ def mock_context():
 def test_fetch_mcp_settings_for_scenario_id_success(mock_get, mock_response):
     """Test successful MCP settings fetch"""
     mock_get.return_value = mock_response
-    name, command, description = get_mcp_settings("test-scenario", "test-key")
+    name, command, description = set_mcp_settings("test-scenario", "test-key")
 
     mock_get.assert_called_once()
     assert name == "Test MCP"
@@ -82,7 +82,7 @@ def test_fetch_mcp_settings_for_scenario_id_error_response(mock_get, mock_error_
     mock_get.return_value = mock_error_response
 
     with pytest.raises(ValueError, match="Configuration error"):
-        get_mcp_settings("test-scenario", "test-key")
+        set_mcp_settings("test-scenario", "test-key")
 
     mock_get.assert_called_once()
 
@@ -101,7 +101,7 @@ def test_fetch_mcp_settings_for_scenario_id_inactive_mcp(mock_get, mock_response
     mock_get.return_value = mock_response
 
     with pytest.raises(ValueError, match="Quickchat MCP not active"):
-        get_mcp_settings("test-scenario", "test-key")
+        set_mcp_settings("test-scenario", "test-key")
 
     mock_get.assert_called_once()
 
@@ -120,7 +120,7 @@ def test_fetch_mcp_settings_for_scenario_id_empty_name_description(mock_get, moc
     mock_get.return_value = mock_response
 
     with pytest.raises(ValueError, match="MCP name and description cannot be empty"):
-        get_mcp_settings("test-scenario", "test-key")
+        set_mcp_settings("test-scenario", "test-key")
 
     mock_get.assert_called_once()
 

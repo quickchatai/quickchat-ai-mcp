@@ -1,6 +1,6 @@
 import os
 
-BASE_URL: str = os.getenv("BASE_URL", "https://app.quickchat.ai")
+BASE_URL: str = os.getenv("BASE_URL", "https://grzegorz.quickchat.dev")
 CHAT_ENDPOINT = f"{BASE_URL}/v1/api/mcp/chat"
 SETTINGS_ENDPOINT = f"{BASE_URL}/v1/api/mcp/settings"
 JWT_PUBLIC_KEY_ENDPOINT = f"{BASE_URL}/v1/api/auth/public_key"
