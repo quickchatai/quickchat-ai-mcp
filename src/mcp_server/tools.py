@@ -1,6 +1,5 @@
 from fastmcp import Context, FastMCP
 from fastmcp.tools import Tool
-
 from src.consts import SEND_MESSAGE_DEFAULT_TOOL_NAME
 from src.mcp_server.lifespan_context import (
     get_conv_id_from_fastmcp_context,
@@ -17,7 +16,7 @@ def _get_send_message_tool_name_from_mcp_command(
 ) -> str:
     send_message_tool_name = SEND_MESSAGE_DEFAULT_TOOL_NAME
     if mcp_command:
-        send_message_tool_name.__name__ = mcp_command
+        send_message_tool_name = mcp_command
     send_message_tool_name += f"__{scenario_id}"
     return send_message_tool_name
 
