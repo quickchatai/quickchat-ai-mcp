@@ -1,14 +1,13 @@
 import json
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch, Mock
 
+import httpx
 import pytest
 
-from src.server import (
-    app_lifespan,
-    fetch_mcp_settings,
-    send_message,
-)
+from src.lifespan_context import app_lifespan
+from src.requests import fetch_mcp_settings, send_message
+from src.schemas import MCPSettingsSchema
 
 TEST_SCENARIO_ID = "test_scenario_id"
 TEST_API_KEY = "test_api_key"
@@ -20,12 +19,54 @@ def mock_env():
     os.environ["SCENARIO_ID"] = "test_scenario"
 
 
-@pytest.fixture
-def mock_response():
+def mock_response_from_response_json(
+    response_json: dict
+) -> Mock:
     """Fixture to create a mock response object"""
     mock = MagicMock()
     mock.status_code = 200
-    mock.content = json.dumps(
+    mock.content = json.dumps(response_json).encode()
+    mock.json.return_value = response_json
+    return mock
+
+
+@pytest.fixture
+def mock_error_response() -> Mock:
+    """Fixture for error responses"""
+    mock = MagicMock()
+    mock.status_code = 400
+    response_json = {"error": "Test Error"}
+    mock.content = json.dumps(response_json).encode()
+    mock.json.return_value = response_json
+    return mock
+
+
+@pytest.fixture
+def mock_unauthorized_response() -> Mock:
+    """Fixture for unauthorized responses"""
+    mock = MagicMock()
+    mock.status_code = 401
+    response_json = {"error": "Unauthorized"}
+    mock.content = json.dumps(response_json).encode()
+    mock.json.return_value = response_json
+    return mock
+
+
+@pytest.fixture
+def mock_context() -> Mock:
+    """Fixture to create a mock context object for MCP"""
+    context = MagicMock()
+    context.request_context.session.client_params.clientInfo.name = "Test Client"
+    context.request_context.session.send_log_message = AsyncMock()
+    context.request_context.lifespan_context.conv_id_by_session_id = {}
+    return context
+
+
+# Tests for the fetch_mcp_settings function
+@patch("requests.get")
+def test_fetch_mcp_settings_success(mock_get: Mock) -> None:
+    """Test successful MCP settings fetch"""
+    mock_get.return_value = mock_response_from_response_json(
         {
             "active": True,
             "name": "Test MCP",
@@ -34,53 +75,17 @@ def mock_response():
             "conv_id": "test-conv-id",
             "reply": "This is a test reply",
         }
-    ).encode()
-    return mock
-
-
-@pytest.fixture
-def mock_error_response():
-    """Fixture for error responses"""
-    mock = MagicMock()
-    mock.status_code = 400
-    mock.content = json.dumps({"error": "Test Error"}).encode()
-    return mock
-
-
-@pytest.fixture
-def mock_unauthorized_response():
-    """Fixture for unauthorized responses"""
-    mock = MagicMock()
-    mock.status_code = 401
-    mock.content = json.dumps({"error": "Unauthorized"}).encode()
-    return mock
-
-
-@pytest.fixture
-def mock_context():
-    """Fixture to create a mock context object for MCP"""
-    context = MagicMock()
-    context.request_context.session.client_params.clientInfo.name = "Test Client"
-    context.request_context.session.send_log_message = AsyncMock()
-    context.request_context.lifespan_context.scenario_to_conv_id = {}
-    return context
-
-
-# Tests for the fetch_mcp_settings function
-@patch("requests.get")
-def test_fetch_mcp_settings_success(mock_get, mock_response):
-    """Test successful MCP settings fetch"""
-    mock_get.return_value = mock_response
-    name, command, description = fetch_mcp_settings("test-scenario", "test-key")
+    )
+    mcp_settings: MCPSettingsSchema = fetch_mcp_settings("test-scenario", "test-key")
 
     mock_get.assert_called_once()
-    assert name == "Test MCP"
-    assert command == "Test Command"
-    assert description == "Test Description"
+    assert mcp_settings.mcp_name == "Test MCP"
+    assert mcp_settings.mcp_command == "Test Command"
+    assert mcp_settings.mcp_description == "Test Description"
 
 
 @patch("requests.get")
-def test_fetch_mcp_settings_error_response(mock_get, mock_error_response):
+def test_fetch_mcp_settings_error_response(mock_get: Mock, mock_error_response: Mock):
     """Test error response handling"""
     mock_get.return_value = mock_error_response
 
@@ -91,17 +96,16 @@ def test_fetch_mcp_settings_error_response(mock_get, mock_error_response):
 
 
 @patch("requests.get")
-def test_fetch_mcp_settings_inactive_mcp(mock_get, mock_response):
+def test_fetch_mcp_settings_inactive_mcp(mock_get: Mock):
     """Test when MCP is not active"""
-    mock_response.content = json.dumps(
+    mock_get.return_value = mock_response_from_response_json(
         {
             "active": False,
             "name": "Test MCP",
             "command": "Test Command",
             "description": "Test Description",
         }
-    ).encode()
-    mock_get.return_value = mock_response
+    )
 
     with pytest.raises(ValueError, match="Quickchat MCP not active"):
         fetch_mcp_settings("test-scenario", "test-key")
@@ -110,19 +114,18 @@ def test_fetch_mcp_settings_inactive_mcp(mock_get, mock_response):
 
 
 @patch("requests.get")
-def test_fetch_mcp_settings_empty_name_description(mock_get, mock_response):
+def test_fetch_mcp_settings_empty_name_description(mock_get: Mock):
     """Test when name or description is empty"""
-    mock_response.content = json.dumps(
+    mock_get.return_value = mock_response_from_response_json(
         {
             "active": True,
             "name": "",
             "command": "Test Command",
             "description": "Test Description",
         }
-    ).encode()
-    mock_get.return_value = mock_response
+    )
 
-    with pytest.raises(ValueError, match="MCP name and description cannot be empty"):
+    with pytest.raises(ValueError, match="MCP Settings validation error"):
         fetch_mcp_settings("test-scenario", "test-key")
 
     mock_get.assert_called_once()
@@ -130,46 +133,73 @@ def test_fetch_mcp_settings_empty_name_description(mock_get, mock_response):
 
 # Tests for the send_message function
 @pytest.mark.asyncio
-@patch("requests.post")
-async def test_send_message_success(mock_post, mock_response, mock_context):
+@patch.object(httpx.AsyncClient, "post", new_callable=AsyncMock)
+async def test_send_message_success(
+    mock_send_message_post: AsyncMock,
+    mock_context: Mock,
+):
     """Test successful message sending"""
-    mock_post.return_value = mock_response
-
-    result = await send_message("Hello", mock_context, TEST_SCENARIO_ID, TEST_API_KEY)
-
-    mock_post.assert_called_once()
-    assert result == "This is a test reply"
-    assert (
-        mock_context.request_context.lifespan_context.scenario_to_conv_id.get(
-            TEST_SCENARIO_ID
-        )
-        == "test-conv-id"
+    mock_send_message_post.return_value = mock_response_from_response_json(
+        {
+            "conv_id": "test-conv-id",
+            "reply": "This is a test reply",
+        }
     )
+
+    result = await send_message(
+        message="Hello",
+        context=mock_context,
+        scenario_id=TEST_SCENARIO_ID,
+        conv_id="test_conv_id",
+        mcp_jwt_token="test_mcp_jwt_token",
+    )
+
+    mock_send_message_post.assert_called_once()
+    assert result.conv_id == "test-conv-id"
+    assert result.reply == "This is a test reply"
 
 
 @pytest.mark.asyncio
-@patch("requests.post")
+@patch.object(httpx.AsyncClient, "post", new_callable=AsyncMock)
 async def test_send_message_unauthorized(
-    mock_post, mock_unauthorized_response, mock_context
+    mock_post: AsyncMock,
+    mock_unauthorized_response: Mock,
+    mock_context: Mock,
 ):
     """Test unauthorized error handling"""
     mock_post.return_value = mock_unauthorized_response
 
     with pytest.raises(ValueError, match="Configuration error"):
-        await send_message("Hello", mock_context, TEST_SCENARIO_ID, TEST_API_KEY)
+        await send_message(
+            message="Hello",
+            context=mock_context,
+            scenario_id=TEST_SCENARIO_ID,
+            conv_id="test_conv_id",
+            mcp_jwt_token="test_mcp_jwt_token",
+        )
 
     mock_post.assert_called_once()
     mock_context.request_context.session.send_log_message.assert_called_once()
 
 
 @pytest.mark.asyncio
-@patch("requests.post")
-async def test_send_message_server_error(mock_post, mock_error_response, mock_context):
+@patch.object(httpx.AsyncClient, "post", new_callable=AsyncMock)
+async def test_send_message_server_error(
+    mock_post: AsyncMock,
+    mock_error_response: Mock,
+    mock_context: Mock
+):
     """Test server error handling"""
     mock_post.return_value = mock_error_response
 
     with pytest.raises(ValueError, match="Server error"):
-        await send_message("Hello", mock_context, TEST_SCENARIO_ID, TEST_API_KEY)
+        await send_message(
+            message="Hello",
+            context=mock_context,
+            scenario_id=TEST_SCENARIO_ID,
+            conv_id="test_conv_id",
+            mcp_jwt_token="test_mcp_jwt_token",
+        )
 
     mock_post.assert_called_once()
     mock_context.request_context.session.send_log_message.assert_called_once()
@@ -182,36 +212,4 @@ async def test_app_lifespan():
     mock_server = MagicMock()
 
     async with app_lifespan(mock_server) as context:
-        assert context.scenario_to_conv_id == {}
-
-
-@pytest.mark.asyncio
-@patch("requests.post")
-async def test_multiple_conv_ids(mock_post, mock_response, mock_context):
-    """Test correct handling of requests with multiple scenario_ids and conv_ids"""
-    assert mock_context.request_context.lifespan_context.scenario_to_conv_id == {}
-
-    mock_response.content = json.dumps(
-        {
-            "conv_id": "conv_id1",
-            "reply": "This is a test reply",
-        }
-    ).encode()
-    mock_post.return_value = mock_response
-    await send_message("Hello", mock_context, "scenario_id1", TEST_API_KEY)
-    assert mock_context.request_context.lifespan_context.scenario_to_conv_id == {
-        "scenario_id1": "conv_id1"
-    }
-
-    mock_response.content = json.dumps(
-        {
-            "conv_id": "conv_id2",
-            "reply": "This is a test reply",
-        }
-    ).encode()
-    mock_post.return_value = mock_response
-    await send_message("Hello", mock_context, "scenario_id2", TEST_API_KEY)
-    assert mock_context.request_context.lifespan_context.scenario_to_conv_id == {
-        "scenario_id1": "conv_id1",
-        "scenario_id2": "conv_id2",
-    }
+        assert context.conv_id_by_session_id == {}
