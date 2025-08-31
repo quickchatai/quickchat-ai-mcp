@@ -10,5 +10,7 @@ class MCPSettings:
 
 @dataclass
 class AppContext:
+    mcp_jwt_token_by_session_id: dict[str, str | None] = field(default_factory=dict)
+    mcp_settings_by_session_id: dict[str, MCPSettings | None] = field(default_factory=dict)
     conv_id_by_session_id: dict[str, str] = field(default_factory=dict)
     scenario_ids_with_tool: set[str] = field(default_factory=set)

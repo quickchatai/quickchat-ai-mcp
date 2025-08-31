@@ -3,10 +3,10 @@ from fastmcp.tools import Tool
 from src.consts import SEND_MESSAGE_DEFAULT_TOOL_NAME
 from src.mcp_server.lifespan_context import (
     get_conv_id_from_fastmcp_context,
-    set_conv_id,
+    set_conv_id_for_session,
 )
+from src.mcp_server.lifespan_schemas import MCPSettings
 from src.requests import send_message
-from src.schemas import MCPSettingsSchema
 from src.utils import get_tools_for_scenario_id
 
 
@@ -23,7 +23,7 @@ def _get_send_message_tool_name_from_mcp_command(
 
 async def create_send_message_tool_for_scenario_id(
     scenario_id: str,
-    mcp_settings: MCPSettingsSchema,
+    mcp_settings: MCPSettings,
     mcp_jwt_token: str,
     fastmcp: FastMCP,
 ) -> Tool:
@@ -43,6 +43,7 @@ async def create_send_message_tool_for_scenario_id(
     async def send_message_for_scenario_id(
         message: str, context: Context
     ) -> str:
+        print("Sending message for scenario_id")
         conv_id = get_conv_id_from_fastmcp_context(context)
         reply, new_conv_id = await send_message(
             message=message,
@@ -51,7 +52,7 @@ async def create_send_message_tool_for_scenario_id(
             conv_id=conv_id,
             mcp_jwt_token=mcp_jwt_token
         )
-        set_conv_id(context=context, conv_id=conv_id)
+        set_conv_id_for_session(context=context, conv_id=conv_id)
         return reply
 
     send_message_tool_name = _get_send_message_tool_name_from_mcp_command(
@@ -70,7 +71,7 @@ async def create_send_message_tool_for_scenario_id(
 
 async def update_send_message_tool_for_scenario_id(
     scenario_id: str,
-    mcp_settings: MCPSettingsSchema,
+    mcp_settings: MCPSettings,
     fastmcp: FastMCP,
 ) -> Tool:
     send_message_tools: list[Tool] = await get_tools_for_scenario_id(

@@ -53,7 +53,7 @@ async def get_tools_for_scenario_id(scenario_id: str, fastmcp: FastMCP) -> list[
     return send_message_tools
 
 
-def get_mcp_settings() -> MCPSettingsSchema:
+def get_mcp_settings_from_headers() -> MCPSettingsSchema:
     expected_header_names = {"mcp_name", "mcp_command", "mcp_description"}
     request_headers = get_http_headers()
     request_header_names = set(request_headers.keys())
