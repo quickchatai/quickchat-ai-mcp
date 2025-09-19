@@ -170,7 +170,7 @@ Make sure your code is properly formatted and all tests are passing:
 ```commandline
 ruff check --fix
 ruff format
-uv run pytest
+uv run --with '.[test]' pytest
 ```
 
 ## GitHub Star History
