@@ -1,6 +1,6 @@
 import json
 import os
-from unittest.mock import AsyncMock, MagicMock, patch, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import httpx
 import pytest
@@ -10,12 +10,12 @@ from src.requests import fetch_mcp_settings, send_message
 from src.schemas import MCPSettingsSchema
 
 TEST_SCENARIO_ID = "test_scenario_id"
-TEST_API_KEY = "test_api_key"
+MCP_USER_JWT_TOKEN = "test_mcp_user_jwt_token"
 
 
 @pytest.fixture(scope="session", autouse=True)
 def mock_env():
-    os.environ["API_KEY"] = "test_api_key"
+    os.environ["MCP_USER_JWT_TOKEN"] = "test_mcp_user_jwt_token"
     os.environ["SCENARIO_ID"] = "test_scenario"
 
 
@@ -57,7 +57,6 @@ def mock_context() -> Mock:
     """Fixture to create a mock context object for MCP"""
     context = MagicMock()
     context.request_context.session.client_params.clientInfo.name = "Test Client"
-    context.request_context.session.send_log_message = AsyncMock()
     context.request_context.lifespan_context.conv_id_by_session_id = {}
     return context
 
@@ -179,7 +178,6 @@ async def test_send_message_unauthorized(
         )
 
     mock_post.assert_called_once()
-    mock_context.request_context.session.send_log_message.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -202,7 +200,6 @@ async def test_send_message_server_error(
         )
 
     mock_post.assert_called_once()
-    mock_context.request_context.session.send_log_message.assert_called_once()
 
 
 # Tests for the app_lifespan context manager

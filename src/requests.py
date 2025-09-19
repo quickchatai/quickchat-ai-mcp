@@ -1,5 +1,6 @@
+import os
+
 from fastmcp import Context
-from fastmcp.exceptions import ClientError
 import httpx
 from pydantic import ValidationError
 
@@ -7,45 +8,58 @@ import requests
 from src.consts import (
     CHAT_ENDPOINT,
     GENERATE_MCP_TOKEN_ENDPOINT,
-    JWT_PUBLIC_KEY_ENDPOINT,
+    MCP_SETTINGS_ENDPOINT,
+    MCP_STATUS_ENDPOINT,
     SEND_MESSAGE_TIMEOUT_SECONDS,
-    SETTINGS_ENDPOINT,
 )
-from src.schemas import MCPSettingsSchema, SendMessageResponse
-from src.utils import get_bearer_token, get_scenario_id_from_jwt_token
+from src.errors import RemoteMcpConnectionError
+from src.lifespan_helpers import register_session_id_with_failed_validation
+from src.schemas import MCPSettingsSchema, MCPStatus, SendMessageResponse
+from src.utils import get_bearer_token
 
+SCENARIO_ID: str = os.getenv("SCENARIO_ID")
+if SCENARIO_ID is None:
+    raise ValueError("Please provide SCENARIO_ID.")
 
-def fetch_jwt_public_key() -> str:
-    print(JWT_PUBLIC_KEY_ENDPOINT)
-    response = requests.get(url=JWT_PUBLIC_KEY_ENDPOINT)
-    if response.status_code != 200:
-        print(
-            f"Configuration error. Please check your MCP token, status_code: {response.status_code}"
-        )
-        raise ValueError("Configuration error. Please check your MCP token")
-
-    return response.json()["key"]
-
-
-def fetch_mcp_settings(
-    scenario_id: str, api_key: str | None = None
-) -> MCPSettingsSchema:
+def fetch_mcp_status(
+    scenario_id: str
+) -> MCPStatus:
     response = requests.get(
-        url=SETTINGS_ENDPOINT,
-        headers={"scenario-id": scenario_id, "X-API-Key": api_key},
+        url=MCP_STATUS_ENDPOINT,
+        headers={"scenario-id": scenario_id},
     )
 
     if response.status_code != 200:
         print(
-            f"Fetch mcp settings failed, status_code: {response.status_code}, response_json: {response.json()}"
+            f"Fetch mcp status failed, status_code: {response.status_code}, url: {MCP_STATUS_ENDPOINT}"
+        )
+        raise RemoteMcpConnectionError()
+
+    try:
+        mcp_status = MCPStatus.model_validate(response.json())
+    except (ValidationError, ValueError) as e:
+        print(f"MCP Status validation error: {e}")
+        raise RemoteMcpConnectionError()
+
+    print(f"MCP Status fetch successful, url: {MCP_STATUS_ENDPOINT}")
+    return mcp_status
+
+
+def fetch_mcp_settings(
+    scenario_id: str, token: str | None = None
+) -> MCPSettingsSchema:
+    response = requests.get(
+        url=MCP_SETTINGS_ENDPOINT,
+        headers={"scenario-id": scenario_id, "Authorization": f"Bearer {token}"},
+    )
+
+    if response.status_code != 200:
+        print(
+            f"Fetch mcp settings failed, status_code: {response.status_code}, url: {MCP_SETTINGS_ENDPOINT}"
         )
         raise ValueError(
-            "Configuration error. Please check your API key and scenario ID."
+            "Configuration error. Please check your auth token and scenario."
         )
-
-    if response.json()["active"] is False:
-        print("Quickchat MCP not active.")
-        raise ValueError("Quickchat MCP not active.")
 
     try:
         mcp_settings_response = MCPSettingsSchema.model_validate(
@@ -64,35 +78,43 @@ def fetch_mcp_settings(
 
 
 async def generate_mcp_jwt_token(
-    scenario_id: str | None = None, jwt_token: str | None = None
+    fastmcp_context: Context,
+    scenario_id: str | None = None,
+    jwt_token: str | None = None,
 ) -> str:
     if jwt_token is None:
-        jwt_token = get_bearer_token()
-    if scenario_id is None:
-        scenario_id = get_scenario_id_from_jwt_token(token=jwt_token)
+        try:
+            jwt_token = get_bearer_token()
+        except Exception as e:
+            print(f"Getting jwt token from headers failed: {e}")
+
+    headers = {"scenario-id": SCENARIO_ID}
+    if jwt_token:
+        headers["authorization"] = f"Bearer {jwt_token}"
 
     async with httpx.AsyncClient() as client:
-        headers = {"scenario-id": scenario_id, "authorization": f"Bearer {jwt_token}"}
         response = await client.post(
             url=GENERATE_MCP_TOKEN_ENDPOINT,
             headers=headers,
         )
 
+    if response.status_code == 401:
+        print("Invalid auth token provided, marking session_id as invalid")
+        register_session_id_with_failed_validation(fastmcp_context=fastmcp_context)
+        raise RemoteMcpConnectionError()
+
     if response.status_code != 200:
         print(
-            f"Configuration error. Please check your MCP token and scenario ID, scenario_id: {scenario_id}, status_code: {response.status_code}"
+            f"MCP Server token generation failed, scenario_id: {scenario_id}, status_code: {response.status_code}"
         )
-        raise ClientError(
-            "Configuration error. Please check your MCP token and scenario ID"
-        )
+        raise RemoteMcpConnectionError()
 
     try:
         token = response.json()["token"]
     except KeyError:
-        print("Generate MCP JWT Token failed: invalid response json")
-        raise ClientError(
-            "Configuration error. Please check your MCP token and scenario ID"
-        )
+        print("Generate MCP JWT Token failed: invalid response json, marking session_id as invalid")
+        register_session_id_with_failed_validation(fastmcp_context=fastmcp_context)
+        raise RemoteMcpConnectionError()
     return token
 
 
@@ -121,15 +143,10 @@ async def send_message(
         )
 
     if response.status_code == 401:
-        await context.request_context.session.send_log_message(
-            level="error",
-            data="Unauthorized access. Double-check your scenario_id and api_key.",
-        )
+        print(f"Unauthorized access. Double-check your scenario_id and auth token, scenario_id: {scenario_id}, auth token: {mcp_jwt_token}, session_id: {context.session_id}")
         raise ValueError("Configuration error.")
     elif response.status_code != 200:
-        await context.request_context.session.send_log_message(
-            level="error", data=f"Server error: {response.content}"
-        )
+        print(f"Server error: {response.content}")
         raise ValueError("Server error. Please try again.")
 
     try:

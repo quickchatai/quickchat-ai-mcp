@@ -1,6 +1,5 @@
 from fastmcp import Context
 from fastmcp.server.dependencies import get_http_headers
-import jwt
 from mcp.shared.context import LifespanContextT
 
 from src.lifespan_context import AppContext
@@ -17,13 +16,6 @@ def get_bearer_token() -> str | None:
     if auth_bearer_header is not None:
         token = auth_bearer_header[7:]  # Remove "Bearer " prefix
     return token
-
-
-def get_scenario_id_from_jwt_token(token: str) -> str:
-    scenario_id = jwt.get_unverified_header(token).get("scenario_id")
-    if scenario_id is None:
-        raise ValueError("Invalid mcp token, no scenario_id found")
-    return scenario_id
 
 
 def get_session_id_and_lifespan_context_from_fastmcp_context(
