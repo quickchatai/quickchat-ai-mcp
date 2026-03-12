@@ -1,44 +1,58 @@
-from functools import partial
 import os
 import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from dotenv import load_dotenv
 from mcp.server import FastMCP
 
-from src.server import (
-    app_lifespan,
-    fetch_mcp_settings,
-    send_message,
-)
+from src import ai_actions, conversations, imports, knowledge_base
+from src.chat import app_lifespan, fetch_mcp_settings, register_chat_tool
+from src.client import QuickchatClient
 
-SCENARIO_ID: str = os.getenv("SCENARIO_ID")
+load_dotenv()
 
-if SCENARIO_ID is None:
-    raise ValueError("Please provide SCENARIO_ID.")
+API_TOKEN: str = os.getenv("API_TOKEN")
 
-API_KEY: str = os.getenv("API_KEY")
+if API_TOKEN is None:
+    raise ValueError("Please provide API_TOKEN.")
 
-mcp_name, mcp_command, send_message_tool_description = fetch_mcp_settings(
-    SCENARIO_ID, API_KEY
-)
+BASE_URL: str = os.getenv("BASE_URL", "https://app.quickchat.ai")
+TRANSPORT: str = os.getenv("TRANSPORT", "stdio")
 
-mcp = FastMCP(mcp_name, lifespan=app_lifespan)
+client = QuickchatClient(api_token=API_TOKEN, base_url=BASE_URL)
 
-send_message = partial(send_message, scenario_id=SCENARIO_ID, api_key=API_KEY)
-if mcp_command:
-    send_message.__name__ = mcp_command
+mcp_name, mcp_command, chat_description = fetch_mcp_settings(client)
+
+if TRANSPORT == "streamable-http":
+    from mcp.server.auth.settings import AuthSettings
+
+    from src.auth import PresenceTokenVerifier
+
+    HOST: str = os.getenv("HOST", "0.0.0.0")
+    PORT: int = int(os.getenv("PORT", "8000"))
+
+    mcp = FastMCP(
+        mcp_name,
+        lifespan=app_lifespan,
+        host=HOST,
+        port=PORT,
+        auth=AuthSettings(
+            issuer_url="https://app.quickchat.ai",
+            resource_server_url=None,
+        ),
+        token_verifier=PresenceTokenVerifier(),
+    )
 else:
-    send_message.__name__ = "send_message"
+    mcp = FastMCP(mcp_name, lifespan=app_lifespan)
 
-# Register tools by hand
-mcp.add_tool(
-    fn=send_message,
-    name=send_message.__name__,
-    description=send_message_tool_description,
-)
+register_chat_tool(mcp, client, mcp_command, chat_description)
+knowledge_base.register_tools(mcp, client)
+conversations.register_tools(mcp, client)
+ai_actions.register_tools(mcp, client)
+imports.register_tools(mcp, client)
 
 
 def run():
     print("Starting Quickchat mcp server")
-    mcp.run()
+    mcp.run(transport=TRANSPORT)
